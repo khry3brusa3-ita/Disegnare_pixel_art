@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unity Pixel Art & Animation Creator</title>
+    <style>
+        :root {
+            --pixel-size: 20px;
+            --bg-dark: #1e1e1e;
+            --bg-panel: #2d2d2d;
+            --accent: #4db8ff;
+            --accent-hover: #3a8cc2;
+            --danger: #e74c3c;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        h1 { margin-top: 0; color: var(--accent); font-size: 24px; text-align: center; }
+        .sidebar h2 { font-size: 18px; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px; }
+
+        button, select, input {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background-color: #3d3d3d;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        button:hover { background-color: var(--accent); color: black; border-color: var(--accent); }
+        button.active { background-color: var(--danger); color: white; border-color: #c0392b; border: 2px solid white; }
+
+        /* MODIFICATO: Stile migliorato per centrare il popup del colore */
+        .color-picker-label {
+            position: relative;
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background-color: #3d3d3d;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            overflow: hidden;
+        }
+        
+        .color-picker-label:hover {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        /* L'input nativo è reso invisibile ma copre l'intero pulsante */
+        .color-picker-label input[type="color"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            left: 0;
+            top: 0;
+            cursor: pointer;
+            padding: 0;
+            border: none;
+        }
+
+        .toolbar {
+            background-color: var(--bg-panel);
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        .undo-redo { display: flex; gap: 5px; border-right: 1px solid #444; padding-right: 10px; margin-right: 5px; }
+
+        .zoom-control { display: flex; align-items: center; gap: 10px; }
+        
+        .recent-colors {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background-color: var(--bg-panel);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            min-height: 44px;
+            box-sizing: border-box;
+        }
+        
+        #recent-colors-container { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+        
+        .color-swatch {
+            width: 24px; height: 24px;
+            border: 1px solid #7f8c8d;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .color-swatch:hover { transform: scale(1.1); }
+
+        .canvas-container {
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            overflow: auto;
+            max-width: 100%;
+            max-height: calc(100vh - 250px);
+        }
+
+        #pixel-canvas {
+            display: grid;
+            background-image:
+                linear-gradient(45deg, #ccc 25%, transparent 25%),
+                linear-gradient(-45deg, #ccc 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ccc 75%),
+                linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: var(--pixel-size) var(--pixel-size);
+            background-position: 0 0, 0 calc(var(--pixel-size)/2), calc(var(--pixel-size)/2) calc(var(--pixel-size)/-2), calc(var(--pixel-size)/-2) 0px;
+            border: 1px solid #999;
+            width: fit-content;
+        }
+
+        .pixel {
+            width: var(--pixel-size); 
+            height: var(--pixel-size);
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        .pixel:hover { border: 1px solid rgba(0, 0, 0, 0.5); }
+
+        .frame-controls { display: flex; gap: 5px; margin-bottom: 15px; }
+        .frame-controls button { flex: 1; padding: 6px; font-size: 12px; }
+        
+        #frames-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1; padding-right: 5px; }
+
+        .frame-item {
+            background-color: #3d3d3d;
+            border-radius: 6px;
+            padding: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        .frame-item.active { border-color: var(--accent); background-color: #4a4a4a; }
+        .frame-item:hover { border-color: #777; }
+        
+        .frame-number { font-size: 12px; margin-bottom: 5px; font-weight: bold; }
+        
+        .frame-thumb {
+            width: 80px; height: 80px;
+            background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 10px 10px;
+            background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+            border: 1px solid #222;
+            image-rendering: pixelated;
+        }
+
+        .delete-frame {
+            position: absolute; top: 5px; right: 5px;
+            background-color: var(--danger); color: white; border: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; padding: 0; opacity: 0;
+        }
+        .frame-item:hover .delete-frame { opacity: 1; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #777; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>Animazione</h2>
+        <div class="frame-controls">
+            <button id="add-frame-btn">+ Nuovo</button>
+            <button id="dup-frame-btn">Duplica</button>
+        </div>
+        <div id="frames-list"></div>
+    </div>
+
+    <div class="main-content">
+        <h1>Unity Pixel Art Creator</h1>
+
+        <div class="toolbar">
+            <div class="undo-redo">
+                <button id="undo-btn" title="Annulla">↩</button>
+                <button id="redo-btn" title="Ripristina">↪</button>
+            </div>
+            
+            <select id="grid-size">
+                <option value="16">16x16</option>
+                <option value="24">24x24</option>
+                <option value="32">32x32</option>
+                <option value="48">48x48</option>
+                <option value="custom">Custom...</option>
+            </select>
+
+            <div id="custom-size-inputs" style="display:none; gap:5px;">
+                <input type="number" id="custom-w" style="width:50px" value="64"> x
+                <input type="number" id="custom-h" style="width:50px" value="64">
+                <button id="apply-custom">Ok</button>
+            </div>
+
+            <div class="zoom-control">
+                <label>Zoom:</label>
+                <input type="range" id="zoom-slider" min="5" max="50" value="20">
+            </div>
+
+            <!-- MODIFICATO: L'input ora è DENTRO la label. Si aprirà esattamente sul pulsante. -->
+            <label class="color-picker-label" title="Scegli Colore">
+                🎨
+                <input type="color" id="color-picker" value="#000000">
+            </label>
+            
+            <button id="eraser-btn">Gomma</button>
+            <button id="clear-btn" style="background-color: #c0392b;">Pulisci Frame</button>
+            
+            <div style="border-left: 1px solid #444; padding-left: 10px; display:flex; gap:10px;">
+                <button id="save-frame-btn" style="background-color: #2ecc71;">Salva Frame</button>
+                <button id="save-sheet-btn" style="background-color: #9b59b6;">Esporta Spritesheet</button>
+            </div>
+        </div>
+
+        <div class="recent-colors">
+            <span>Recenti:</span>
+            <div id="recent-colors-container"></div>
+        </div>
+
+        <div class="canvas-container">
+            <div id="pixel-canvas" draggable="false"></div>
+        </div>
+    </div>
+
+    <script>
+        const gridSizeSelect = document.getElementById('grid-size');
+        const customSizeInputs = document.getElementById('custom-size-inputs');
+        const applyCustomBtn = document.getElementById('apply-custom');
+        const zoomSlider = document.getElementById('zoom-slider');
+        const colorPicker = document.getElementById('color-picker');
+        const eraserBtn = document.getElementById('eraser-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const saveFrameBtn = document.getElementById('save-frame-btn');
+        const saveSheetBtn = document.getElementById('save-sheet-btn');
+        const recentColorsContainer = document.getElementById('recent-colors-container');
+        const pixelCanvas = document.getElementById('pixel-canvas');
+        const framesList = document.getElementById('frames-list');
+        const addFrameBtn = document.getElementById('add-frame-btn');
+        const dupFrameBtn = document.getElementById('dup-frame-btn');
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+
+        let currentColor = '#000000';
+        let isEraser = false;
+        let isDrawing = false;
+        let gridW = 16, gridH = 16;
+        let recentColors = [];
+        let framesData = [];
+        let currentFrameIndex = 0;
+        
+        let undoStack = [];
+        let redoStack = [];
+
+        function init() {
+            setupEvents();
+            resetProject(gridW, gridH);
+        }
+
+        function saveHistory() {
+            undoStack.push(JSON.stringify(framesData));
+            redoStack = []; 
+            if(undoStack.length > 30) undoStack.shift();
+        }
+
+        function undo() {
+            if (undoStack.length > 0) {
+                redoStack.push(JSON.stringify(framesData));
+                const prevState = undoStack.pop();
+                framesData = JSON.parse(prevState);
+                loadFrameToDOM(currentFrameIndex);
+            }
+        }
+
+        function redo() {
+            if (redoStack.length > 0) {
+                undoStack.push(JSON.stringify(framesData));
+                const nextState = redoStack.pop();
+                framesData = JSON.parse(nextState);
+                loadFrameToDOM(currentFrameIndex);
+            }
+        }
+
+        function resetProject(w, h) {
+            gridW = w; gridH = h;
+            framesData = [new Array(gridW * gridH).fill('transparent')];
+            currentFrameIndex = 0;
+            undoStack = []; redoStack = [];
+            buildDOMGrid();
+            loadFrameToDOM(0);
+        }
+
+        function buildDOMGrid() {
+            pixelCanvas.innerHTML = '';
+            pixelCanvas.style.gridTemplateColumns = `repeat(${gridW}, 1fr)`;
+            for (let i = 0; i < gridW * gridH; i++) {
+                const pixel = document.createElement('div');
+                pixel.classList.add('pixel');
+                pixel.dataset.index = i;
+                pixel.addEventListener('mousedown', (e) => {
+                    saveHistory();
+                    isDrawing = true;
+                    applyColor(e.target);
+                });
+                pixel.addEventListener('mouseenter', (e) => {
+                    if (isDrawing) applyColor(e.target);
+                });
+                pixelCanvas.appendChild(pixel);
+            }
+        }
+
+        function loadFrameToDOM(index) {
+            currentFrameIndex = index;
+            const data = framesData[index];
+            const pixels = document.querySelectorAll('.pixel');
+            for (let i = 0; i < data.length; i++) {
+                pixels[i].style.backgroundColor = data[i];
+            }
+            updateFramesUI();
+        }
+
+        function applyColor(pixelElement) {
+            const idx = pixelElement.dataset.index;
+            const colorToApply = isEraser ? 'transparent' : currentColor;
+            pixelElement.style.backgroundColor = colorToApply;
+            framesData[currentFrameIndex][idx] = colorToApply;
+            updateThumbnail(currentFrameIndex);
+            
+            if (!isEraser) {
+                addRecentColor(currentColor);
+            }
+        }
+
+        colorPicker.addEventListener('input', (e) => {
+            currentColor = e.target.value;
+            setEraserMode(false);
+        });
+
+        colorPicker.addEventListener('change', (e) => {
+            addRecentColor(currentColor);
+        });
+
+        function setEraserMode(active) {
+            isEraser = active;
+            if(isEraser) eraserBtn.classList.add('active');
+            else eraserBtn.classList.remove('active');
+        }
+
+        eraserBtn.addEventListener('click', () => setEraserMode(!isEraser));
+
+        function addRecentColor(color) {
+            if (color === 'transparent') return;
+            
+            const existingIndex = recentColors.indexOf(color);
+            if (existingIndex > -1) {
+                recentColors.splice(existingIndex, 1);
+            }
+
+            recentColors.unshift(color);
+            if (recentColors.length > 12) recentColors.pop();
+            
+            updateRecentColorsUI();
+        }
+
+        function updateRecentColorsUI() {
+            recentColorsContainer.innerHTML = '';
+            recentColors.forEach(color => {
+                const swatch = document.createElement('div');
+                swatch.classList.add('color-swatch');
+                swatch.style.backgroundColor = color;
+                swatch.title = color;
+                swatch.addEventListener('click', () => {
+                    currentColor = color;
+                    colorPicker.value = color;
+                    setEraserMode(false);
+                });
+                recentColorsContainer.appendChild(swatch);
+            });
+        }
+
+        function updateThumbnail(index) {
+            const canvas = document.getElementById(`thumb-${index}`);
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, gridW, gridH);
+            const data = framesData[index];
+            for (let i = 0; i < data.length; i++) {
+                if (data[i] !== 'transparent') {
+                    ctx.fillStyle = data[i];
+                    ctx.fillRect(i % gridW, Math.floor(i / gridW), 1, 1);
+                }
+            }
+        }
+
+        function updateFramesUI() {
+            framesList.innerHTML = '';
+            framesData.forEach((data, index) => {
+                const item = document.createElement('div');
+                item.className = 'frame-item ' + (index === currentFrameIndex ? 'active' : '');
+                item.onclick = () => loadFrameToDOM(index);
+                item.innerHTML = `<div class="frame-number">Frame ${index + 1}</div><canvas class="frame-thumb" id="thumb-${index}" width="${gridW}" height="${gridH}"></canvas><button class="delete-frame" title="Elimina Frame">X</button>`;
+                item.querySelector('.delete-frame').onclick = (e) => { e.stopPropagation(); deleteFrame(index); };
+                framesList.appendChild(item);
+                updateThumbnail(index);
+            });
+        }
+
+        function deleteFrame(index) {
+            if (framesData.length <= 1) {
+                alert("Non puoi eliminare l'unico frame rimasto!");
+                return;
+            }
+            if (confirm("Vuoi davvero eliminare questo frame?")) {
+                saveHistory();
+                framesData.splice(index, 1);
+                if (currentFrameIndex >= framesData.length) currentFrameIndex = framesData.length - 1;
+                loadFrameToDOM(currentFrameIndex);
+            }
+        }
+
+        function saveCanvasToPNG(frameIndex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = gridW;
+            canvas.height = gridH;
+            const ctx = canvas.getContext('2d');
+            
+            const data = framesData[frameIndex];
+            for (let i = 0; i < data.length; i++) {
+                if (data[i] !== 'transparent') {
+                    const x = i % gridW;
+                    const y = Math.floor(i / gridW);
+                    ctx.fillStyle = data[i];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+
+            const link = document.createElement('a');
+            link.download = `frame_${frameIndex + 1}_${gridW}x${gridH}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function saveSpritesheet() {
+            const numFrames = framesData.length;
+            const canvas = document.createElement('canvas');
+            canvas.width = gridW * numFrames;
+            canvas.height = gridH;
+            const ctx = canvas.getContext('2d');
+            
+            framesData.forEach((data, fIndex) => {
+                const offsetX = fIndex * gridW; 
+                for (let i = 0; i < data.length; i++) {
+                    if (data[i] !== 'transparent') {
+                        const x = (i % gridW) + offsetX;
+                        const y = Math.floor(i / gridW);
+                        ctx.fillStyle = data[i];
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                }
+            });
+
+            const link = document.createElement('a');
+            link.download = `spritesheet_${numFrames}frames_${gridW}x${gridH}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function setupEvents() {
+            window.addEventListener('mouseup', () => isDrawing = false);
+            undoBtn.addEventListener('click', undo);
+            redoBtn.addEventListener('click', redo);
+            
+            addFrameBtn.addEventListener('click', () => { 
+                saveHistory(); 
+                framesData.push(new Array(gridW * gridH).fill('transparent')); 
+                loadFrameToDOM(framesData.length - 1); 
+            });
+            
+            dupFrameBtn.addEventListener('click', () => { 
+                saveHistory(); 
+                framesData.splice(currentFrameIndex + 1, 0, [...framesData[currentFrameIndex]]); 
+                loadFrameToDOM(currentFrameIndex + 1); 
+            });
+            
+            zoomSlider.addEventListener('input', (e) => document.documentElement.style.setProperty('--pixel-size', e.target.value + 'px'));
+            
+            clearBtn.addEventListener('click', () => { 
+                if(confirm("Sei sicuro di voler svuotare completamente questo frame?")) {
+                    saveHistory(); 
+                    framesData[currentFrameIndex].fill('transparent'); 
+                    loadFrameToDOM(currentFrameIndex); 
+                }
+            });
+            
+            gridSizeSelect.addEventListener('change', (e) => { 
+                if(e.target.value === 'custom') {
+                    customSizeInputs.style.display = 'flex'; 
+                } else { 
+                    customSizeInputs.style.display = 'none';
+                    if(confirm('Attenzione: Cambiare la risoluzione cancellerà TUTTA l\'animazione. Continuare?')) {
+                        resetProject(parseInt(e.target.value), parseInt(e.target.value)); 
+                    } else {
+                        e.target.value = gridW;
+                    }
+                } 
+            });
+            
+            applyCustomBtn.addEventListener('click', () => {
+                const w = parseInt(document.getElementById('custom-w').value);
+                const h = parseInt(document.getElementById('custom-h').value);
+                if (w > 0 && h > 0) {
+                    if(confirm('Attenzione: Cambiare la risoluzione cancellerà TUTTA l\'animazione. Continuare?')) {
+                        resetProject(w, h);
+                    }
+                }
+            });
+            
+            saveFrameBtn.addEventListener('click', () => saveCanvasToPNG(currentFrameIndex));
+            saveSheetBtn.addEventListener('click', saveSpritesheet);
+        }
+
+        init();
+    </script>
+</body>
+</html>
+
