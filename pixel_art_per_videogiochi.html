@@ -62,7 +62,6 @@
         button:hover { background-color: var(--accent); color: black; border-color: var(--accent); }
         button.active { background-color: var(--danger); color: white; border-color: #c0392b; border: 2px solid white; }
 
-        /* MODIFICATO: Stile migliorato per centrare il popup del colore */
         .color-picker-label {
             position: relative;
             padding: 6px 12px;
@@ -84,7 +83,6 @@
             border-color: var(--accent);
         }
 
-        /* L'input nativo è reso invisibile ma copre l'intero pulsante */
         .color-picker-label input[type="color"] {
             position: absolute;
             opacity: 0;
@@ -254,7 +252,6 @@
                 <input type="range" id="zoom-slider" min="5" max="50" value="20">
             </div>
 
-            <!-- MODIFICATO: L'input ora è DENTRO la label. Si aprirà esattamente sul pulsante. -->
             <label class="color-picker-label" title="Scegli Colore">
                 🎨
                 <input type="color" id="color-picker" value="#000000">
@@ -263,7 +260,11 @@
             <button id="eraser-btn">Gomma</button>
             <button id="clear-btn" style="background-color: #c0392b;">Pulisci Frame</button>
             
+            <!-- NUOVO: Pulsante per importare file -->
             <div style="border-left: 1px solid #444; padding-left: 10px; display:flex; gap:10px;">
+                <button id="import-btn" style="background-color: #f39c12;">Importa</button>
+                <input type="file" id="import-file" accept="image/png" style="display: none;">
+                
                 <button id="save-frame-btn" style="background-color: #2ecc71;">Salva Frame</button>
                 <button id="save-sheet-btn" style="background-color: #9b59b6;">Esporta Spritesheet</button>
             </div>
@@ -287,6 +288,8 @@
         const colorPicker = document.getElementById('color-picker');
         const eraserBtn = document.getElementById('eraser-btn');
         const clearBtn = document.getElementById('clear-btn');
+        const importBtn = document.getElementById('import-btn');
+        const importFile = document.getElementById('import-file');
         const saveFrameBtn = document.getElementById('save-frame-btn');
         const saveSheetBtn = document.getElementById('save-sheet-btn');
         const recentColorsContainer = document.getElementById('recent-colors-container');
@@ -474,6 +477,101 @@
             }
         }
 
+        // --- SISTEMA DI IMPORTAZIONE PNG ---
+        importBtn.addEventListener('click', () => importFile.click());
+
+        importFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    
+                    // Cerca di indovinare le proporzioni (assume frame quadrati di default)
+                    let newGridH = img.height;
+                    let newGridW = img.height; 
+                    
+                    // Se l'immagine non è divisibile per un quadrato, usa la larghezza intera (frame singolo non quadrato)
+                    if (img.width % img.height !== 0) {
+                        if (img.width % gridW === 0 && img.height === gridH) {
+                            newGridW = gridW; // Mantieni l'aspect ratio corrente se combacia perfettamente
+                        } else {
+                            newGridW = img.width; 
+                        }
+                    }
+
+                    const numFrames = Math.max(1, Math.floor(img.width / newGridW));
+
+                    if (confirm(`Rilevata immagine da ${img.width}x${img.height} pixel. \nVerrà importata come ${numFrames} frame(s) da ${newGridW}x${newGridH}. \n\nATTENZIONE: Il progetto attuale andrà perso. Continuare?`)) {
+                        
+                        gridW = newGridW;
+                        gridH = newGridH;
+                        
+                        // Aggiorna l'interfaccia a discesa della griglia
+                        if ([16, 24, 32, 48].includes(gridW) && gridW === gridH) {
+                            gridSizeSelect.value = gridW.toString();
+                            customSizeInputs.style.display = 'none';
+                        } else {
+                            gridSizeSelect.value = 'custom';
+                            customSizeInputs.style.display = 'flex';
+                            document.getElementById('custom-w').value = gridW;
+                            document.getElementById('custom-h').value = gridH;
+                        }
+
+                        // Leggi i pixel tramite canvas nascosto
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = img.width;
+                        tempCanvas.height = img.height;
+                        const ctx = tempCanvas.getContext('2d', { willReadFrequently: true });
+                        ctx.drawImage(img, 0, 0);
+
+                        framesData = [];
+                        const extractedColors = new Set();
+
+                        for (let f = 0; f < numFrames; f++) {
+                            const frameData = [];
+                            const imgData = ctx.getImageData(f * gridW, 0, gridW, gridH).data;
+                            
+                            for (let i = 0; i < imgData.length; i += 4) {
+                                // Se l'alpha è basso, consideralo trasparente
+                                if (imgData[i+3] < 128) {
+                                    frameData.push('transparent');
+                                } else {
+                                    // Converti RGB in Hex
+                                    const r = imgData[i].toString(16).padStart(2, '0');
+                                    const g = imgData[i+1].toString(16).padStart(2, '0');
+                                    const b = imgData[i+2].toString(16).padStart(2, '0');
+                                    const hex = `#${r}${g}${b}`;
+                                    frameData.push(hex);
+                                    extractedColors.add(hex);
+                                }
+                            }
+                            framesData.push(frameData);
+                        }
+
+                        // Ripristina lo stato
+                        currentFrameIndex = 0;
+                        undoStack = [];
+                        redoStack = [];
+                        buildDOMGrid();
+                        loadFrameToDOM(0);
+
+                        // Carica i colori trovati nei recenti
+                        recentColors = Array.from(extractedColors).slice(0, 12);
+                        updateRecentColorsUI();
+                    }
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+            
+            // Resetta l'input per permettere di ricaricare lo stesso file in futuro
+            e.target.value = '';
+        });
+
+        // --- SISTEMA DI SALVATAGGIO ---
         function saveCanvasToPNG(frameIndex) {
             const canvas = document.createElement('canvas');
             canvas.width = gridW;
@@ -579,4 +677,3 @@
     </script>
 </body>
 </html>
-
